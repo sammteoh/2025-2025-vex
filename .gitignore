@@ -1,0 +1,54 @@
+# Compiled Object files
+*.o
+*.obj
+
+# Executables
+*.bin
+*.elf
+
+# PROS
+bin/
+.vscode/
+.cache/
+compile_commands.json
+temp.log
+temp.errors
+*.ini
+.d/
+
+# ===== PROS Project Build Artifacts =====
+bin/
+dist/
+deploy/
+firmware.bin
+firmware/
+
+# ===== Build / compilation files =====
+*.o
+*.a
+*.so
+*.exe
+*.out
+*.elf
+*.d
+compile_commands.json
+.d/
+
+# ===== IDE / Editor / Environment =====
+.vscode/
+.idea/
+*.code-workspace
+.cache/
+*.swp
+*.swo
+
+# ===== System / OS files =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== Libraries / External (if you want them ignored) =====
+# if you have libs/build folders you don’t track
+lib/
+*.lib
+*.dll
