@@ -1,3 +1,4 @@
+#include "pros/screen.hpp"
 #include <cstddef>
 #include <iostream>
 using namespace std;
@@ -13,6 +14,10 @@ using namespace std;
 #include "pros/misc.hpp"
 #include "pros/motor_group.hpp"
 #include "pros/rotation.hpp"
+
+
+int COLOR = 190;
+int OP_COLOR = 0;
 
 // Controller
 pros::Controller controller(pros::E_CONTROLLER_MASTER);
@@ -31,6 +36,9 @@ pros::Imu imu(17);
 // Tracking wheels
 pros::Rotation horizontalEnc(std::nullptr_t);
 pros::Rotation verticalEnc(std::nullptr_t);
+
+pros::Optical opticalSensor(14);
+int hue_value = opticalSensor.get_hue();
 
 //lemlib::TrackingWheel horizontal(&horizontalEnc, lemlib::Omniwheel::NEW_325, 10);
 //lemlib::TrackingWheel vertical(&verticalEnc, lemlib::Omniwheel::NEW_325, 10);
@@ -127,6 +135,20 @@ void intake_stop() {
 	firstIntake.move(0);
 }
 
+void auto_intake() {
+	hue_value = opticalSensor.get_hue();
+	pros::screen::erase();
+	pros::screen::print(pros::E_TEXT_MEDIUM, 4, "Hue value: %lf \n", hue_value);
+	//pros::screen::print(TEXT_MEDIUM, 3, "%d", hue_value);
+	if (hue_value > COLOR - 30 && hue_value < COLOR + 30) {
+		intake();
+	} else if (hue_value > OP_COLOR - 30 && hue_value < COLOR + 30) {
+		intake_drop();
+	} else {
+		intake_stop();
+	}
+}
+
 // Autonomous
 void autonomous() {
 	// Parked
@@ -170,6 +192,8 @@ void opcontrol() {
 		} else {
 			intake_stop();
 		};
+
+		auto_intake();
 
 		pros::delay(10);
 	}
