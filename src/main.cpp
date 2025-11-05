@@ -1,3 +1,4 @@
+#include "pros/motors.h"
 #include "pros/screen.hpp"
 #include <cstddef>
 #include <iostream>
@@ -18,6 +19,9 @@ using namespace std;
 
 int COLOR = 190;
 int OP_COLOR = 0;
+bool is_auto = false;
+bool is_long = false;
+bool is_top = false;
 
 // Controller
 pros::Controller controller(pros::E_CONTROLLER_MASTER);
@@ -27,8 +31,10 @@ pros::MotorGroup leftMotors({-20, 10, -19},
 							pros::MotorGearset::blue);
 pros::MotorGroup rightMotors({-1, 12, 11},
 							pros::MotorGearset::blue);
-pros::Motor firstIntake(16, pros::MotorGear::blue);
-pros::Motor secondIntake(15, pros::MotorGear::blue);
+pros::Motor firstMotor(16, pros::MotorGear::green);
+pros::Motor secondMotor(8, pros::MotorGear::green);
+pros::Motor thirdMotor(5, pros::MotorGear::green);
+pros::Motor fourthMotor(4, pros::MotorGear::green);
 
 // Inertial
 pros::Imu imu(17);
@@ -37,8 +43,7 @@ pros::Imu imu(17);
 pros::Rotation horizontalEnc(std::nullptr_t);
 pros::Rotation verticalEnc(std::nullptr_t);
 
-pros::Optical opticalSensor(14);
-int hue_value = opticalSensor.get_hue();
+pros::Optical opticalSensor(18);
 
 //lemlib::TrackingWheel horizontal(&horizontalEnc, lemlib::Omniwheel::NEW_325, 10);
 //lemlib::TrackingWheel vertical(&verticalEnc, lemlib::Omniwheel::NEW_325, 10);
@@ -113,39 +118,47 @@ void disabled() {}
 void competition_initialize() {}
 
 void intake_drop() {
-	firstIntake.move(-127);
-	secondIntake.move(-127);
+	firstMotor.move(-127);
+	secondMotor.move(-127);
 }
 
 void intake() {
-	firstIntake.move(-127);
-	secondIntake.move(127);
-}
-
-void first_intake_out() {
-	firstIntake.move(127);
-}
-
-void second_intake_out() {
-	secondIntake.move(-127);
+	firstMotor.move(-127);
+	secondMotor.move(127);
 }
 
 void intake_stop() {
-	secondIntake.move(0);
-	firstIntake.move(0);
+	secondMotor.move(0);
+	firstMotor.move(0);
+	thirdMotor.move(0);
+	fourthMotor.move(0);
+}
+
+void score_long() {
+	firstMotor.move(-127);
+	secondMotor.move(127);
+	thirdMotor.move(127);
+	fourthMotor.move(-127);
+}
+
+void score_top() {
+	firstMotor.move(-127);
+	secondMotor.move(127);
+	thirdMotor.move(127);
+	fourthMotor.move(127);	
 }
 
 void auto_intake() {
-	hue_value = opticalSensor.get_hue();
+	int hue_value = opticalSensor.get_hue();
 	pros::screen::erase();
-	pros::screen::print(pros::E_TEXT_MEDIUM, 4, "Hue value: %lf \n", hue_value);
 	//pros::screen::print(TEXT_MEDIUM, 3, "%d", hue_value);
-	if (hue_value > COLOR - 30 && hue_value < COLOR + 30) {
-		intake();
-	} else if (hue_value > OP_COLOR - 30 && hue_value < COLOR + 30) {
+	if (hue_value > OP_COLOR - 30 && hue_value < OP_COLOR + 30) {
 		intake_drop();
+		pros::delay(100);
+		pros::screen::print(pros::E_TEXT_MEDIUM, 5, "Reading red: %i \n", hue_value);
 	} else {
-		intake_stop();
+		intake();
+		pros::screen::print(pros::E_TEXT_MEDIUM, 5, "Reading blue: %i \n", hue_value);
 	}
 }
 
@@ -181,19 +194,35 @@ void opcontrol() {
 		
 		chassis.arcade(leftY, rightX);
 
-		if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L1)) {
-			intake();
-		} else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) {
-			intake_drop();
-		} else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_X)) {
-			intake_stop();
-		} else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_Y)) {
-			first_intake_out();
+		if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_A)) {
+			is_auto = !is_auto;
+		}
+
+		if (is_auto) {
+			auto_intake();
 		} else {
 			intake_stop();
-		};
+		}
 
-		auto_intake();
+		if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_Y)) {
+			is_long = !is_long;
+		}
+
+		if (is_long) {
+			is_top = false;
+			intake_stop();
+			score_long();
+		}
+
+		if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_UP)) {
+			is_top = !is_top;
+		}
+
+		if (is_top) {
+			is_long = false;
+			intake_stop();
+			score_top();
+		}
 
 		pros::delay(10);
 	}
