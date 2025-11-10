@@ -1,4 +1,8 @@
+#include "pros/colors.h"
 #include "pros/motors.h"
+#include "pros/rtos.h"
+#include "pros/rtos.hpp"
+#include "pros/screen.h"
 #include "pros/screen.hpp"
 #include <cstddef>
 #include <iostream>
@@ -15,13 +19,15 @@ using namespace std;
 #include "pros/misc.hpp"
 #include "pros/motor_group.hpp"
 #include "pros/rotation.hpp"
+#include "api.h"
 
 
-int COLOR = 190;
-int OP_COLOR = 0;
+int COLOR = 0; // 0 - 50 (red)
+int OP_COLOR = 180; //110 - 220 (blue)
 bool is_auto = false;
 bool is_long = false;
 bool is_top = false;
+bool is_manual = false;
 
 // Controller
 pros::Controller controller(pros::E_CONTROLLER_MASTER);
@@ -43,7 +49,8 @@ pros::Imu imu(17);
 pros::Rotation horizontalEnc(std::nullptr_t);
 pros::Rotation verticalEnc(std::nullptr_t);
 
-pros::Optical opticalSensor(18);
+pros::Optical opticalSensor(20);
+pros::Optical opticalSensor2(3);
 
 //lemlib::TrackingWheel horizontal(&horizontalEnc, lemlib::Omniwheel::NEW_325, 10);
 //lemlib::TrackingWheel vertical(&verticalEnc, lemlib::Omniwheel::NEW_325, 10);
@@ -109,6 +116,7 @@ lemlib::Chassis chassis(drivetrain, linearController, angularController, sensors
 void initialize() {
 	pros::lcd::initialize();
 	chassis.calibrate();
+	opticalSensor.set_led_pwm(50);
 }
 
 // Disabled
@@ -125,6 +133,7 @@ void intake_drop() {
 void intake() {
 	firstMotor.move(-127);
 	secondMotor.move(127);
+	thirdMotor.move(-127);
 }
 
 void intake_stop() {
@@ -136,29 +145,46 @@ void intake_stop() {
 
 void score_long() {
 	firstMotor.move(-127);
-	secondMotor.move(127);
+	secondMotor.move(-127);
 	thirdMotor.move(127);
 	fourthMotor.move(-127);
 }
 
 void score_top() {
 	firstMotor.move(-127);
-	secondMotor.move(127);
+	secondMotor.move(-127);
 	thirdMotor.move(127);
 	fourthMotor.move(127);	
 }
 
 void auto_intake() {
-	int hue_value = opticalSensor.get_hue();
-	pros::screen::erase();
-	//pros::screen::print(TEXT_MEDIUM, 3, "%d", hue_value);
-	if (hue_value > OP_COLOR - 30 && hue_value < OP_COLOR + 30) {
-		intake_drop();
-		pros::delay(100);
-		pros::screen::print(pros::E_TEXT_MEDIUM, 5, "Reading red: %i \n", hue_value);
-	} else {
-		intake();
-		pros::screen::print(pros::E_TEXT_MEDIUM, 5, "Reading blue: %i \n", hue_value);
+	while (true) {
+		int hue_value = opticalSensor.get_hue();
+		pros::screen::erase();
+
+		if (is_auto) {
+			if (hue_value > OP_COLOR - 20 && hue_value < OP_COLOR + 20) {
+				intake_drop();
+				pros::screen::set_pen(pros::c::COLOR_BLUE);
+				pros::screen::fill_rect(1,1,480,200);	
+				pros::screen::print(pros::E_TEXT_MEDIUM, 3, "Hue: %i", hue_value);			
+				pros::delay(800);
+			} else if (hue_value > COLOR - 30 && hue_value < COLOR + 30) {
+				pros::screen::set_pen(pros::c::COLOR_RED);
+				pros::screen::fill_rect(1,1,480,200);
+				pros::screen::print(pros::E_TEXT_MEDIUM, 3, "Hue: %i", hue_value);					
+				intake();
+			} else {
+				//pros::screen::set_pen(pros::c::COLOR_BLACK);
+				//pros::screen::fill_rect(1,1,480,200);	
+				pros::screen::print(pros::E_TEXT_MEDIUM, 3, "Hue: %i", hue_value);								
+				intake();
+			}
+		} else {
+			intake_stop();
+		}
+
+		pros::delay(10);
 	}
 }
 
@@ -168,25 +194,50 @@ void autonomous() {
 	chassis.setPose(0, 0, 0);
 
 	// Move to loader
-	chassis.moveToPoint(0, 29, 100000000);
+	chassis.moveToPoint(0, 32, 10000);
 
-	chassis.turnToHeading(-90, 10000000);
+	chassis.turnToHeading(-90, 1000);
 
-	chassis.moveToPoint(-15, 29, 100000000);
+	chassis.moveToPoint(-13, 29, 1000);
+
+	pros::delay(2000);
 
 	// Move to long score
-	chassis.moveToPoint(0, 29, 4000, {.forwards = false}, true);
+	chassis.moveToPoint(0, 32, 4000, {.forwards = false});
 
-	chassis.moveToPoint(20, 29, 100000000);
+	chassis.turnToHeading(90, 1000, {.direction = AngularDirection::CCW_COUNTERCLOCKWISE});
+	
+	chassis.moveToPoint(20, 33, 1000);
+
+	score_long();
+	pros::delay(2000);
+	intake_stop();
+
+	chassis.turnToHeading(135, 1000);
 
 	// Move to middle blocks
 	chassis.moveToPoint(0, 29, 4000, {.forwards = false}, true);
+	is_auto = true;
+
+	chassis.moveToPoint(20, 20, 4000, {.minSpeed=70});
 
 	// Move to middle score
-	chassis.moveToPoint(45, 0, 100000000);
+	chassis.moveToPoint(40, 0, 100000000);
+	pros::delay(1000);
+	score_top();
+	is_auto = false;
+	//pros::delay(2000);
+	//intake_stop();
+
 }
 
 void opcontrol() {
+	pros::Task auto_task(auto_intake, TASK_PRIORITY_DEFAULT, TASK_STACK_DEPTH_DEFAULT, "Auto Intake");
+	auto_task.resume();
+
+	int first_motor_movement = 127;
+	int second_motor_movement = 127;
+	int third_motor_movement = 127;
 
 	while (true) {
 		int leftY = controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y);
@@ -194,35 +245,62 @@ void opcontrol() {
 		
 		chassis.arcade(leftY, rightX);
 
+		opticalSensor.set_led_pwm(100);
+
 		if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_A)) {
 			is_auto = !is_auto;
-		}
-
-		if (is_auto) {
-			auto_intake();
-		} else {
-			intake_stop();
 		}
 
 		if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_Y)) {
 			is_long = !is_long;
 		}
 
-		if (is_long) {
-			is_top = false;
-			intake_stop();
-			score_long();
-		}
-
 		if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_UP)) {
 			is_top = !is_top;
 		}
 
-		if (is_top) {
+		if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_X)) {
+			is_manual = true;
+			is_auto = false;
 			is_long = false;
-			intake_stop();
+			is_top = false;
+		}
+
+		while (is_manual) {
+			if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_LEFT)) {
+				first_motor_movement = -first_motor_movement;
+				second_motor_movement = -second_motor_movement;
+				third_motor_movement = -third_motor_movement;
+			}
+
+			if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_A)) {
+				firstMotor.move(first_motor_movement);
+			}
+
+			if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_B)) {
+				secondMotor.move(second_motor_movement);
+			}
+
+			if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_Y)) {
+				thirdMotor.move(third_motor_movement);
+			}
+
+			if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_X)) {
+				is_manual = false;
+			}
+		}
+
+		//if (is_long) {
+			//is_auto = false;
+			//is_top = false;
+			//score_long();
+		//}
+		if (is_top) {
+			is_auto = false;
+			is_long = false;
 			score_top();
 		}
+
 
 		pros::delay(10);
 	}
