@@ -24,8 +24,14 @@ using namespace std;
 // 0 = RED
 // 180 = BLUE
 
-int COLOR = 180; // 0 - 50 (red) 
-int OP_COLOR = 0; //110 - 220 (blue)
+int COLOR;
+int OP_COLOR;
+
+bool is_blue = true;
+
+// is_left means "Is the loader to the left of the robot? Does the robot move left first?"
+bool is_left = true;
+
 bool is_auto = false;
 bool is_long = false;
 bool is_top = false;
@@ -129,6 +135,16 @@ void disabled() {}
 // Competition initialization
 void competition_initialize() {}
 
+void set_color() {
+	if (is_blue) {
+		int COLOR = 180; // 0 - 50 (red) 
+		int OP_COLOR = 0; //110 - 220 (blue)
+	} else {
+		int COLOR = 0; // 0 - 50 (red) 
+		int OP_COLOR = 180; //110 - 220 (blue)
+	}
+}
+
 void intake_drop() {
 	firstMotor.move(-127);
 	secondMotor.move(-127);
@@ -178,12 +194,20 @@ void auto_intake() {
 		
 			if (hue_value > OP_COLOR - 20 && hue_value < OP_COLOR + 20) {
 				intake_drop();
-				pros::screen::set_pen(pros::c::COLOR_BLUE);
+				if (OP_COLOR == 180) {
+					pros::screen::set_pen(pros::c::COLOR_RED);
+				} else {
+					pros::screen::set_pen(pros::c::COLOR_BLUE);
+				}
 				pros::screen::fill_rect(1,1,480,200);	
 				pros::screen::print(pros::E_TEXT_MEDIUM, 3, "Hue: %i", hue_value);			
 				pros::delay(800);
 			} else if (hue_value > COLOR - 30 && hue_value < COLOR + 30) {
-				pros::screen::set_pen(pros::c::COLOR_RED);
+				if (COLOR == 180) {
+					pros::screen::set_pen(pros::c::COLOR_RED);
+				} else {
+					pros::screen::set_pen(pros::c::COLOR_BLUE);
+				}
 				pros::screen::fill_rect(1,1,480,200);
 				pros::screen::print(pros::E_TEXT_MEDIUM, 3, "Hue: %i", hue_value);					
 				intake();
@@ -204,10 +228,13 @@ void auto_intake() {
 void auto_score() {
 	while (true) {
 		if (is_long) {
+			is_move = true;
 			score_long();
 		} else if (is_top) {
+			is_move = true;
 			score_top();
 		} else if (is_bottom) {
+			is_move = true;
 			score_bottom();
 		} else if (!is_move) {
 			intake_stop();
@@ -217,8 +244,61 @@ void auto_score() {
 	}
 }
 
-// Autonomous
-void autonomous() {
+void left_autonomous() {
+	pros::Task autoIntake(auto_intake, TASK_PRIORITY_DEFAULT, TASK_STACK_DEPTH_DEFAULT, "Auto Intake");
+	autoIntake.resume();
+
+	pros::Task autoScore(auto_score, TASK_PRIORITY_DEFAULT, TASK_STACK_DEPTH_DEFAULT, "Auto Score");
+	autoScore.resume();
+
+	//HORIZONTAL DRIFT OF 8
+
+	// Parked
+	chassis.setPose(0, 0, 0);
+
+	// Move to loader
+	/* chassis.moveToPoint(0, 30, 10000);
+
+	chassis.turnToHeading(-90, 1000);
+
+	chassis.moveToPoint(-13, 30, 1000); */
+
+	chassis.moveToPose(-14, 27.5, 290, 4000, {.minSpeed = 127});
+
+	pros::delay(2000);
+
+	// Move to long score
+
+	chassis.moveToPoint(0, 27.5, 4000, {.forwards = false, .minSpeed = 72, .earlyExitRange = 2});
+
+	chassis.turnToHeading(90, 1000, {.direction = AngularDirection::CCW_COUNTERCLOCKWISE});
+	
+	chassis.moveToPoint(15, 33, 1000);
+
+	is_long = true;
+	pros::delay(4000);
+	is_long = false;
+
+	// Move to middle blocks
+	chassis.moveToPoint(0, 32, 4000, {.forwards = false}, true);
+
+	chassis.turnToHeading(135, 1000);
+	is_auto = true;
+
+	//chassis.moveToPose(25, 12, 120, 2000, {.lead=0.9, .minSpeed=72});
+	//chassis.moveToPose(39.7, -0.7, 135, 4000, {.minSpeed=40});
+	
+	chassis.moveToPoint(36.5, -0.2, 4000, {.maxSpeed=40});
+
+	// Move to middle score
+	pros::delay(4000);
+	is_auto = false;
+	is_top = true;
+	//pros::delay(2000);
+	//intake_stop(); */
+}
+
+void right_autonomous() {
 	pros::Task autoIntake(auto_intake, TASK_PRIORITY_DEFAULT, TASK_STACK_DEPTH_DEFAULT, "Auto Intake");
 	autoIntake.resume();
 
@@ -231,41 +311,51 @@ void autonomous() {
 	// Move to loader
 	chassis.moveToPoint(0, 30, 10000);
 
-	chassis.turnToHeading(-90, 1000);
+	chassis.turnToHeading(90, 1000);
 
-	chassis.moveToPoint(-13, 30, 1000);
+	chassis.moveToPoint(13, 30, 1000);
 
 	//pros::delay(2000);
 
 	// Move to long score
 	chassis.moveToPoint(0, 30, 4000, {.forwards = false});
 
-	chassis.turnToHeading(90, 1000, {.direction = AngularDirection::CCW_COUNTERCLOCKWISE});
+	chassis.turnToHeading(-90, 1000, {.direction = AngularDirection::CCW_COUNTERCLOCKWISE});
 	
-	chassis.moveToPoint(18, 31, 1000);
+	chassis.moveToPoint(-18.5, 32, 1000);
 
-	score_long();
-	pros::delay(2000);
-	intake_stop();
+	is_long = true;
+	pros::delay(4000);
+	is_long = false;
 
 	// Move to middle blocks
 	chassis.moveToPoint(0, 30, 4000, {.forwards = false}, true);
 
-	chassis.turnToHeading(135, 1000);
+	chassis.turnToHeading(-135, 1000);
 	is_auto = true;
 
-	chassis.moveToPoint(40, 0, 4000, {.maxSpeed=70});
+	chassis.moveToPoint(-39.7, -0.7, 4000, {.maxSpeed=40});
 
 	// Move to middle score
-	pros::delay(2000);
+	pros::delay(4000);
 	is_auto = false;
-	is_top = true;
+	is_bottom = true;
 	//pros::delay(2000);
 	//intake_stop();
+}
 
+// Autonomous
+void autonomous() {
+	set_color();
+	if (is_left) {
+		left_autonomous();
+	} else {
+		right_autonomous();
+	}
 }
 
 void opcontrol() {
+	set_color();
 	pros::Task autoIntake(auto_intake, TASK_PRIORITY_DEFAULT, TASK_STACK_DEPTH_DEFAULT, "Auto Intake");
 	autoIntake.resume();
 
@@ -365,6 +455,8 @@ void opcontrol() {
 		pros::delay(10);
 	}
 }
+
+
 
 /*
 motor_group.move(voltage: number)
