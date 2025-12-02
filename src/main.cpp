@@ -1,3 +1,4 @@
+#include "pros/adi.hpp"
 #include "pros/colors.h"
 #include "pros/motors.h"
 #include "pros/rtos.h"
@@ -38,6 +39,9 @@ bool is_top = false;
 bool is_bottom = false;
 bool is_manual = false;
 bool is_move = false;
+bool is_intake = false;
+
+bool is_load = false;
 
 // Controller
 pros::Controller controller(pros::E_CONTROLLER_MASTER);
@@ -51,6 +55,9 @@ pros::Motor firstMotor(16, pros::MotorGear::green);
 pros::Motor secondMotor(8, pros::MotorGear::green);
 pros::Motor thirdMotor(5, pros::MotorGear::green);
 pros::Motor fourthMotor(4, pros::MotorGear::green);
+
+pros::adi::DigitalOut piston ('H');
+pros::adi::DigitalOut piston2 ('G');
 
 // Inertial
 pros::Imu imu(17);
@@ -146,17 +153,20 @@ void set_color() {
 }
 
 void intake_drop() {
+	is_move = true;
 	firstMotor.move(-127);
 	secondMotor.move(-127);
 }
 
 void intake() {
+	is_move = true;
 	firstMotor.move(-127);
 	secondMotor.move(127);
 	thirdMotor.move(-127);
 }
 
 void intake_stop() {
+	is_move = false;
 	secondMotor.move(0);
 	firstMotor.move(0);
 	thirdMotor.move(0);
@@ -164,6 +174,7 @@ void intake_stop() {
 }
 
 void score_long() {
+	is_move = true;
 	firstMotor.move(-127);
 	secondMotor.move(-127);
 	thirdMotor.move(127);
@@ -171,6 +182,7 @@ void score_long() {
 }
 
 void score_top() {
+	is_move = true;
 	firstMotor.move(-127);
 	secondMotor.move(-127);
 	thirdMotor.move(127);
@@ -178,8 +190,9 @@ void score_top() {
 }
 
 void score_bottom() {
+	is_move = true;
 	firstMotor.move(127);
-	secondMotor.move(0);
+	secondMotor.move(20);
 	thirdMotor.move(127);
 	fourthMotor.move(0);
 }
@@ -193,21 +206,14 @@ void auto_intake() {
 			intake();
 		
 			if (hue_value > OP_COLOR - 20 && hue_value < OP_COLOR + 20) {
+				is_load = false;
 				intake_drop();
-				if (OP_COLOR == 180) {
-					pros::screen::set_pen(pros::c::COLOR_RED);
-				} else {
-					pros::screen::set_pen(pros::c::COLOR_BLUE);
-				}
+				pros::screen::set_pen(pros::c::COLOR_RED);
 				pros::screen::fill_rect(1,1,480,200);	
 				pros::screen::print(pros::E_TEXT_MEDIUM, 3, "Hue: %i", hue_value);			
 				pros::delay(800);
 			} else if (hue_value > COLOR - 30 && hue_value < COLOR + 30) {
-				if (COLOR == 180) {
-					pros::screen::set_pen(pros::c::COLOR_RED);
-				} else {
-					pros::screen::set_pen(pros::c::COLOR_BLUE);
-				}
+				pros::screen::set_pen(pros::c::COLOR_BLUE);
 				pros::screen::fill_rect(1,1,480,200);
 				pros::screen::print(pros::E_TEXT_MEDIUM, 3, "Hue: %i", hue_value);					
 				intake();
@@ -244,12 +250,27 @@ void auto_score() {
 	}
 }
 
+void auto_load() {
+	while (true) {
+		if (is_load) {
+			piston.set_value(true);
+			piston2.set_value(false);
+		} else {
+			piston.set_value(false);
+			piston2.set_value(true);
+		}
+	}
+}
+
 void left_autonomous() {
 	pros::Task autoIntake(auto_intake, TASK_PRIORITY_DEFAULT, TASK_STACK_DEPTH_DEFAULT, "Auto Intake");
 	autoIntake.resume();
 
 	pros::Task autoScore(auto_score, TASK_PRIORITY_DEFAULT, TASK_STACK_DEPTH_DEFAULT, "Auto Score");
 	autoScore.resume();
+
+	pros::Task autoLoad(auto_load, TASK_PRIORITY_DEFAULT, TASK_STACK_DEPTH_DEFAULT, "Auto Load");
+	autoLoad.resume();
 
 	//HORIZONTAL DRIFT OF 8
 
@@ -263,17 +284,23 @@ void left_autonomous() {
 
 	chassis.moveToPoint(-13, 30, 1000); */
 
-	chassis.moveToPose(-14, 27.5, 290, 4000, {.minSpeed = 127});
+	is_load = true;
 
-	pros::delay(2000);
+	is_auto = true;
+
+	chassis.moveToPose(-12, 28, 300, 4000, {.minSpeed = 127});
+
+	pros::delay(3000);
+
+	is_auto = false;
 
 	// Move to long score
 
-	chassis.moveToPoint(0, 27.5, 4000, {.forwards = false, .minSpeed = 72, .earlyExitRange = 2});
+	chassis.moveToPoint(0, 28, 4000, {.forwards = false, .minSpeed = 72, .earlyExitRange = 2});
 
 	chassis.turnToHeading(90, 1000, {.direction = AngularDirection::CCW_COUNTERCLOCKWISE});
 	
-	chassis.moveToPoint(15, 33, 1000);
+	chassis.moveToPoint(15, 34, 1000);
 
 	is_long = true;
 	pros::delay(4000);
@@ -305,36 +332,41 @@ void right_autonomous() {
 	pros::Task autoScore(auto_score, TASK_PRIORITY_DEFAULT, TASK_STACK_DEPTH_DEFAULT, "Auto Score");
 	autoScore.resume();
 
+	pros::Task autoLoad(auto_load, TASK_PRIORITY_DEFAULT, TASK_STACK_DEPTH_DEFAULT, "Auto Load");
+	autoLoad.resume();
+
 	// Parked
 	chassis.setPose(0, 0, 0);
 
 	// Move to loader
-	chassis.moveToPoint(0, 30, 10000);
 
-	chassis.turnToHeading(90, 1000);
+	is_load = true;
+	is_auto = true;
 
-	chassis.moveToPoint(13, 30, 1000);
+	chassis.moveToPose(15, 28, 80, 4000, {.minSpeed = 127});
 
-	//pros::delay(2000);
+	pros::delay(2000);
+
+	is_auto = false;
 
 	// Move to long score
-	chassis.moveToPoint(0, 30, 4000, {.forwards = false});
+	chassis.moveToPoint(0, 33, 4000, {.forwards = false});
 
-	chassis.turnToHeading(-90, 1000, {.direction = AngularDirection::CCW_COUNTERCLOCKWISE});
+	chassis.turnToHeading(-80, 1000, {.direction = AngularDirection::CCW_COUNTERCLOCKWISE});
 	
-	chassis.moveToPoint(-18.5, 32, 1000);
+	chassis.moveToPoint(-18.5, 25, 1000);
 
 	is_long = true;
 	pros::delay(4000);
 	is_long = false;
 
 	// Move to middle blocks
-	chassis.moveToPoint(0, 30, 4000, {.forwards = false}, true);
+	chassis.moveToPoint(0, 33, 4000, {.forwards = false});
 
-	chassis.turnToHeading(-135, 1000);
+	chassis.turnToHeading(-145, 1000);
 	is_auto = true;
 
-	chassis.moveToPoint(-39.7, -0.7, 4000, {.maxSpeed=40});
+	//chassis.moveToPoint(-39.7, -0.7, 4000, {.maxSpeed=40});
 
 	// Move to middle score
 	pros::delay(4000);
@@ -362,6 +394,9 @@ void opcontrol() {
 	pros::Task autoScore(auto_score, TASK_PRIORITY_DEFAULT, TASK_STACK_DEPTH_DEFAULT, "Auto Score");
 	autoScore.resume();
 
+	pros::Task autoLoad(auto_load, TASK_PRIORITY_DEFAULT, TASK_STACK_DEPTH_DEFAULT, "Auto Load");
+	autoLoad.resume();	
+
 	int first_motor_movement = 127;
 	int second_motor_movement = 127;
 	int third_motor_movement = 127;
@@ -381,6 +416,19 @@ void opcontrol() {
 				is_long = false;
 				is_top = false;
 				is_bottom = false;
+				is_intake = false;
+			}
+		}
+
+		if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L1)) {
+			is_intake = !is_intake;
+			if (is_intake) {
+				intake_stop();
+				is_long = false;
+				is_top = false;
+				is_bottom = false;
+				is_auto = false;
+				intake();
 			}
 		}
 
@@ -391,6 +439,7 @@ void opcontrol() {
 				is_auto = false;
 				is_top = false;
 				is_bottom = false;
+				is_intake = false;
 			}
 		}
 
@@ -401,6 +450,7 @@ void opcontrol() {
 				is_long = false;
 				is_auto = false;
 				is_bottom = false;
+				is_intake = false;
 			}
 		}
 
@@ -411,6 +461,7 @@ void opcontrol() {
 				is_top = false;
 				is_auto = false;
 				is_long = false;
+				is_intake = false;
 			}
 		}
 
@@ -420,6 +471,11 @@ void opcontrol() {
 			is_long = false;
 			is_top = false;
 			is_bottom = false;
+			is_intake = false;
+		}
+
+		if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_B)) {
+			is_load = !is_load;
 		}
 
 		while (is_manual) {
@@ -446,7 +502,7 @@ void opcontrol() {
 			}
 		}
 
-		if (is_auto || is_long || is_top || is_bottom || is_manual) {
+		if (is_auto || is_long || is_top || is_bottom || is_manual || is_intake) {
 			is_move = true;
 		} else {
 			is_move = false;
